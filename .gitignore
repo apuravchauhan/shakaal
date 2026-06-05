@@ -1,0 +1,4 @@
+node_modules/
+.env
+blocklist.json
+.DS_Store

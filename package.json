@@ -1,0 +1,17 @@
+{
+  "name": "shakaal",
+  "version": "1.0.0",
+  "description": "Browser-based terminal using xterm.js + node-pty",
+  "author": "Apurav Chauhan",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^4.18.2",
+    "node-pty": "^1.1.0",
+    "ws": "^8.16.0"
+  }
+}

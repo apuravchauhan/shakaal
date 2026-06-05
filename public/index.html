@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agents</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #000000;
+      --bg2:    #030303;
+      --bg3:    #060606;
+      --border: #2a2a2a;
+      --text:   #e0e0e0;
+      --accent: #57c7ff;
+      --green:  #28c840;
+      --red:    #ff5f57;
+    }
+
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Menlo','Monaco','Courier New',monospace;
+      height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    #topbar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px 8px 6px; background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0; flex-wrap: wrap;
+    }
+    #topbar-title { font-size: 13px; font-weight: 600; color: #ffffff; margin-right: 4px; }
+    #topbar-actions { display: flex; align-items: center; gap: 10px; flex: 1; }
+    #topbar-agents  { display: flex; align-items: center; gap: 10px; flex: 1; }
+    #topbar-icons   { display: flex; align-items: center; gap: 10px; }
+
+    @media (max-width: 600px) {
+      #topbar { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 14px; }
+      #topbar-actions { order: 1; justify-content: space-between; flex: none; }
+      #topbar-agents  { flex: none; }
+      #topbar-title   { order: 2; text-align: left; margin-right: 0; color: #ffffff; }
+      #topbar-agents .agent-btn { color: #ffffff; }
+    }
+
+    .agent-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg2);
+      color: #ffffff; font-size: 12px; font-family: inherit;
+      cursor: pointer; transition: border-color 0.15s; white-space: nowrap;
+    }
+    .agent-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .agent-btn .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background 0.2s; flex-shrink: 0; }
+    .agent-btn.active .dot { background: var(--green); }
+    .agent-btn.active { border-color: #2a3a2a; }
+
+    #pane-area {
+      flex: 1; display: flex; gap: 1px;
+      background: var(--bg); overflow: hidden; min-height: 0;
+      position: relative;
+    }
+
+    @media (max-width: 600px) {
+      #pane-area { flex-direction: column; overflow-y: auto; overflow-x: hidden; }
+      .pane { flex: 0 0 40vh; min-width: 0; }
+    }
+    #home-img {
+      width: 100%; height: 100%; object-fit: cover;
+      pointer-events: none;
+    }
+    #pane-area:has(.pane) #home-img { display: none; }
+
+    .pane {
+      flex: 1; display: flex; flex-direction: column;
+      background: var(--bg); min-width: 0; overflow: hidden;
+    }
+    .pane-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 12px; background: var(--bg2);
+      border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .pane-header .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+    .pane-name   { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; }
+    .pane-end {
+      display: flex; align-items: center; justify-content: center;
+      background: none; border: 1px solid var(--red); border-radius: 4px;
+      color: var(--red); padding: 3px; cursor: pointer; opacity: 0.7;
+    }
+    .pane-end:hover { opacity: 1; }
+
+    .pane-detach {
+      display: flex; align-items: center; justify-content: center;
+      background: none; border: none; color: #555;
+      cursor: pointer; padding: 0; line-height: 1;
+    }
+    .pane-detach:hover { color: var(--text); }
+
+    .pane-terminal { flex: 1; padding: 4px; overflow: hidden; min-height: 0; }
+    .pane-terminal .xterm { height: 100%; }
+    .pane-terminal .xterm-viewport { overflow-y: auto !important; }
+
+
+    #topbar-icons { display: flex; align-items: center; gap: 10px; }
+    #topbar-icons a { color: #ffffff; display: flex; text-decoration: none; opacity: 0.85; transition: opacity 0.15s; }
+    #topbar-icons a:hover { opacity: 1; }
+
+    /* shadcn-style scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+    * { scrollbar-width: thin; scrollbar-color: #3f3f46 transparent; }
+
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <span id="topbar-title">Your Web-Terminal Agents</span>
+  <div id="topbar-actions">
+    <div id="topbar-agents">
+      <button class="agent-btn" data-name="Shakaal" data-cwd="/Users/apuravchauhan/Office-Drive/Agent-Team/Shakaal/etl2"><span class="dot"></span> Shakaal</button>
+      <button class="agent-btn" data-name="Katya"   data-cwd="/Users/apuravchauhan/Office-Drive/Agent-Team/Katya/etl2"><span class="dot"></span> Katya</button>
+      <button class="agent-btn" data-name="Bulla"   data-cwd="/Users/apuravchauhan/Office-Drive/Agent-Team/Bulla/etl2"><span class="dot"></span> Bulla</button>
+    </div>
+    <div id="topbar-icons">
+      <a href="https://x.com/apuravchauhan" target="_blank" rel="noopener" aria-label="X">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"><rect width="24" height="24" rx="3" fill="currentColor"/><path fill="#000000" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      </a>
+      <a href="https://www.linkedin.com/in/apuravchauhan/" target="_blank" rel="noopener" aria-label="LinkedIn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0H5C2.239 0 0 2.239 0 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5V5c0-2.761-2.238-5-5-5zM8 19H5V8h3v11zM6.5 6.732c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zM20 19h-3v-5.604c0-3.368-4-3.113-4 0V19h-3V8h3v1.765c1.396-2.586 7-2.777 7 2.476V19z"/></svg>
+      </a>
+      <a href="https://github.com/apuravchauhan" target="_blank" rel="noopener" aria-label="GitHub">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+      </a>
+    </div>
+  </div>
+</div>
+
+<div id="pane-area">
+  <img id="home-img" src="/shakaal2.png" alt="" />
+</div>
+
+<script>
+  const THEME = {
+    background:'#000000',foreground:'#e0e0e0',cursor:'#e0e0e0',cursorAccent:'#0d0d0d',
+    selectionBackground:'rgba(255,255,255,0.12)',
+    black:'#1a1a1a',brightBlack:'#555',red:'#ff5f57',brightRed:'#ff5f57',
+    green:'#5af78e',brightGreen:'#5af78e',yellow:'#f3f99d',brightYellow:'#f3f99d',
+    blue:'#57c7ff',brightBlue:'#57c7ff',magenta:'#ff6ac1',brightMagenta:'#ff6ac1',
+    cyan:'#9aedfe',brightCyan:'#9aedfe',white:'#e0e0e0',brightWhite:'#ffffff',
+  };
+
+  const ICONS = {
+    minimize: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6"/><path d="m3 21 7-7"/><path d="M20 10h-6V4"/><path d="m21 3-7 7"/></svg>`,
+    power: `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>`,
+  };
+
+  const panes = new Map();
+
+  async function syncSessionStatus() {
+    try {
+      const live = await fetch('/sessions').then(r => r.json());
+      document.querySelectorAll('.agent-btn[data-name]').forEach(btn => {
+        if (live.includes(btn.dataset.name)) btn.classList.add('active');
+      });
+    } catch (_) {}
+  }
+
+  function openSession(name, cwd) {
+    if (panes.has(name)) { panes.get(name).term.focus(); return; }
+
+    const pane = document.createElement('div');
+    pane.className = 'pane';
+    pane.dataset.name = name;
+    pane.innerHTML = `
+      <div class="pane-header">
+        <span class="dot"></span>
+        <span class="pane-name">${name}</span>
+        <button class="pane-end">${ICONS.power}</button>
+        <button class="pane-detach">${ICONS.minimize}</button>
+      </div>
+      <div class="pane-terminal"></div>`;
+    document.getElementById('pane-area').appendChild(pane);
+
+    const termEl    = pane.querySelector('.pane-terminal');
+    const endBtn    = pane.querySelector('.pane-end');
+    const detachBtn = pane.querySelector('.pane-detach');
+
+    const term = new Terminal({ cursorBlink:true, fontSize:13, lineHeight:1.3,
+      fontFamily:'"Menlo","Monaco","Courier New",monospace', scrollback:5000, theme:THEME });
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.loadAddon(new WebLinksAddon.WebLinksAddon());
+    term.open(termEl);
+    fitAddon.fit();
+
+    const wsProto = location.protocol==='https:' ? 'wss:' : 'ws:';
+    const wsUrl   = `${wsProto}//${location.host}?name=${encodeURIComponent(name)}&cwd=${encodeURIComponent(cwd)}`;
+    let ws, reconnectTimer, closing = false;
+
+    function connect() {
+      ws = new WebSocket(wsUrl);
+      ws.onopen = () => {
+        clearTimeout(reconnectTimer); sendResize();
+        document.querySelectorAll(`.agent-btn[data-name="${name}"]`).forEach(b=>b.classList.add('active'));
+      };
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type==='output') term.write(msg.data);
+        else if (msg.type==='exit') {
+          term.write(`\r\n\x1b[33m[session ended]\x1b[0m\r\n`);
+          document.querySelectorAll(`.agent-btn[data-name="${name}"]`).forEach(b=>b.classList.remove('active'));
+        }
+      };
+      ws.onclose = () => {
+        if (closing) return;
+        term.write('\r\n\x1b[31m[disconnected — reconnecting in 3s…]\x1b[0m\r\n');
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+      ws.onerror = () => ws.close();
+    }
+
+    const sendResize = () => { if (ws?.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'resize',cols:term.cols,rows:term.rows})); };
+    term.onData((data) => { if (ws?.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'input',data})); });
+    const ro = new ResizeObserver(() => { fitAddon.fit(); sendResize(); });
+    ro.observe(termEl);
+    term.onResize(sendResize);
+
+    detachBtn.addEventListener('click', () => {
+      closing = true; clearTimeout(reconnectTimer);
+      ws?.close(); ro.disconnect(); term.dispose(); pane.remove();
+      panes.delete(name);
+    });
+
+    endBtn.addEventListener('click', () => {
+      closing = true;
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'end-session' }));
+      clearTimeout(reconnectTimer);
+      ws?.close(); ro.disconnect(); term.dispose(); pane.remove();
+      panes.delete(name);
+      document.querySelectorAll(`.agent-btn[data-name="${name}"]`).forEach(b=>b.classList.remove('active'));
+    });
+
+    panes.set(name, { term, fitAddon, pane });
+    connect(); term.focus();
+  }
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.agent-btn');
+    if (btn) openSession(btn.dataset.name, btn.dataset.cwd);
+  });
+
+  syncSessionStatus();
+</script>
+</body>
+</html>
