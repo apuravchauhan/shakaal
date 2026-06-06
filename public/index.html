@@ -108,6 +108,19 @@
     #topbar-icons { display: flex; align-items: center; gap: 10px; }
     #topbar-icons a { color: #ffffff; display: flex; text-decoration: none; opacity: 0.85; transition: opacity 0.15s; }
     #topbar-icons a:hover { opacity: 1; }
+    #upload-btn {
+      background: none; border: none; color: #ffffff; cursor: pointer;
+      display: flex; align-items: center; opacity: 0.85; padding: 0;
+      transition: opacity 0.15s;
+    }
+    #upload-btn:hover { opacity: 1; }
+    #upload-toast {
+      position: fixed; bottom: 18px; right: 18px; z-index: 9999;
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
+      padding: 10px 16px; font-size: 12px; color: #e0e0e0;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s;
+    }
+    #upload-toast.show { opacity: 1; }
 
     /* shadcn-style scrollbars */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -128,6 +141,10 @@
       <button class="agent-btn" data-name="Shakaal" data-cwd="/Users/apuravchauhan/Office-Drive/Agent-Team/Shakaal/etl2"><span class="dot"></span> Shakaal</button>
       <button class="agent-btn" data-name="Katya"   data-cwd="/Users/apuravchauhan/Office-Drive/Agent-Team/Katya/etl2"><span class="dot"></span> Katya</button>
       <button class="agent-btn" data-name="Bulla"   data-cwd="/Users/apuravchauhan/Office-Drive/Agent-Team/Bulla/etl2"><span class="dot"></span> Bulla</button>
+      <button id="upload-btn" aria-label="Upload data file" title="Upload data file">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </button>
+      <input id="upload-input" type="file" style="display:none" />
     </div>
     <div id="topbar-icons">
       <a href="https://github.com/apuravchauhan/shakaal" target="_blank" rel="noopener" aria-label="GitHub">
@@ -142,6 +159,7 @@
     </div>
   </div>
 </div>
+<div id="upload-toast"></div>
 
 <div id="pane-area">
   <img id="home-img" src="/shakaal2.png" alt="" />
@@ -258,6 +276,41 @@
   });
 
   syncSessionStatus();
+
+  // ── File upload ──────────────────────────────────────────────────────────────
+  const uploadBtn   = document.getElementById('upload-btn');
+  const uploadInput = document.getElementById('upload-input');
+  const uploadToast = document.getElementById('upload-toast');
+  let toastTimer;
+
+  function showToast(msg, color) {
+    uploadToast.textContent = msg;
+    uploadToast.style.color = color || '#e0e0e0';
+    uploadToast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => uploadToast.classList.remove('show'), 3500);
+  }
+
+  uploadBtn.addEventListener('click', () => uploadInput.click());
+
+  uploadInput.addEventListener('change', async () => {
+    const file = uploadInput.files[0];
+    if (!file) return;
+    uploadInput.value = '';
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    showToast(`Uploading ${file.name}…`);
+    try {
+      const res  = await fetch('/upload', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (json.ok) showToast(`Saved: ${json.filename}`, '#5af78e');
+      else         showToast(`Error: ${json.error}`, '#ff5f57');
+    } catch (err) {
+      showToast('Upload failed', '#ff5f57');
+    }
+  });
 </script>
 </body>
 </html>

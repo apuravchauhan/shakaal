@@ -7,6 +7,8 @@ const path     = require('path');
 const url      = require('url');
 const fs       = require('fs');
 const crypto   = require('crypto');
+const multer   = require('multer');
+const os       = require('os');
 
 const app    = express();
 const server = http.createServer(app);
@@ -152,6 +154,27 @@ app.post('/auth', (req, res) => {
 app.use((req, res, next) => {
   if (isAuthenticated(req)) return next();
   res.redirect('/login');
+});
+
+// ── File upload ───────────────────────────────────────────────────────────────
+const UPLOAD_DIR = path.join(os.homedir(), 'data-upload');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext  = path.extname(file.originalname);
+    const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const ts   = Date.now();
+    cb(null, `${base}_${ts}${ext}`);
+  },
+});
+const upload = multer({ storage });
+
+app.post('/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file received' });
+  console.log(`[upload] saved ${req.file.filename} → ${UPLOAD_DIR}`);
+  res.json({ ok: true, filename: req.file.filename });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
