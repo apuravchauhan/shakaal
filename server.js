@@ -22,7 +22,6 @@ const SCROLLBACK_SIZE = 200 * 1024;
 const MAX_SESSIONS    = 20;
 const MAX_FAILURES    = 3;
 const BLOCKLIST_FILE  = path.join(__dirname, 'blocklist.json');
-const IS_PROD         = process.env.NODE_ENV === 'production';
 
 if (!PORTAL_KEY) {
   console.error('PORTAL_KEY is not set. Add it to .env');
@@ -73,7 +72,7 @@ function isAuthenticated(req) {
 }
 
 function tokenCookie(token) {
-  return `portal_token=${token}; HttpOnly; SameSite=Strict; Path=/${IS_PROD ? '; Secure' : ''}`;
+  return `portal_token=${token}; HttpOnly; SameSite=Strict; Path=/`;
 }
 
 // ── Global middleware ─────────────────────────────────────────────────────────
