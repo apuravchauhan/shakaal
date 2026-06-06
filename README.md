@@ -2,15 +2,17 @@
 
 # Shakaal
 
-<img src="public/shakaal2.png" alt="Shakaal" width="100%" style="max-height:150px;object-fit:cover;object-position:50% 30%;">
+<img src="public/shakaal2.png" alt="Shakaal" width="100%">
 
 </div>
 
 ---
 
-Shakaal is a lightweight utility that exposes your local terminal over the web. It spins up a small Express server with a browser-based xterm.js client, giving you a fully functional shell session from any browser tab — no SSH client, no VPN, just a URL and a secret key.
+Shakaal was born from a simple question: *can I access my CLI-based coding agents on the go, without keeping my laptop on?*
 
-Great for quick remote access behind a tunnel (Cloudflare, ngrok, etc.) without any heavyweight setup.
+Plenty of tools exist that give you a custom UI for AI agents — but that wasn't the goal. The goal was the exact same CLI environment, the same workflow, the same muscle memory. No new interface to learn. No frills.
+
+The core is dead simple: expose your terminal on the web and run your favourite CLI AI agent exactly the way you already do — just from anywhere. Built for developers who live in the terminal and don't want to leave it.
 
 ## Setup
 
