@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>data-upload</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #000000;
+      --bg2:    #030303;
+      --bg3:    #060606;
+      --border: #2a2a2a;
+      --text:   #e0e0e0;
+      --accent: #57c7ff;
+      --green:  #5af78e;
+      --red:    #ff5f57;
+    }
+
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Menlo','Monaco','Courier New',monospace;
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 16px; background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { font-size: 13px; font-weight: 600; color: #fff; flex: 1; }
+    header a {
+      color: #ffffff; text-decoration: none; font-size: 12px;
+      opacity: 0.5; transition: opacity 0.15s;
+    }
+    header a:hover { opacity: 1; }
+
+    #drop-zone {
+      margin: 20px; padding: 28px 20px;
+      border: 1px dashed var(--border); border-radius: 8px;
+      text-align: center; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      color: #444; font-size: 12px;
+    }
+    #drop-zone .hint { display: block; margin-top: 5px; font-size: 11px; color: #333; }
+    #drop-zone.over {
+      border-color: var(--accent);
+      background: rgba(87,199,255,0.04);
+      color: var(--accent);
+    }
+    #drop-zone.over .hint { color: var(--accent); opacity: 0.6; }
+
+    #status {
+      margin: 0 20px 14px; font-size: 12px; min-height: 16px;
+      transition: color 0.15s;
+    }
+    #status.ok  { color: var(--green); }
+    #status.err { color: var(--red); }
+
+    #file-table {
+      width: calc(100% - 40px); margin: 0 20px;
+      border-collapse: collapse; font-size: 12px;
+    }
+    thead th {
+      text-align: left; padding: 6px 10px;
+      color: #444; font-weight: 500;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid #0d0d0d; }
+    tbody tr:hover { background: var(--bg3); }
+    td { padding: 8px 10px; }
+    td.name { color: var(--text); word-break: break-all; }
+    td.size { color: #555; white-space: nowrap; }
+    td.date { color: #555; white-space: nowrap; }
+    td.dl   { text-align: right; }
+
+    .dl-btn {
+      background: none; border: 1px solid var(--border); border-radius: 4px;
+      color: #666; font-family: inherit; font-size: 11px;
+      padding: 3px 9px; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .dl-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    #empty {
+      margin: 48px 20px; text-align: center;
+      font-size: 12px; color: #2a2a2a;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+    * { scrollbar-width: thin; scrollbar-color: #3f3f46 transparent; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>~/data-upload</h1>
+  <a href="/" target="_self">← agents</a>
+</header>
+
+<div id="drop-zone">
+  Drop files here to upload
+  <span class="hint">or click to browse</span>
+</div>
+<input id="file-input" type="file" style="display:none" multiple />
+
+<div id="status"></div>
+
+<table id="file-table" style="display:none">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Size</th>
+      <th>Modified</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody id="file-list"></tbody>
+</table>
+<div id="empty">No files yet.</div>
+
+<script>
+  const dropZone  = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const fileList  = document.getElementById('file-list');
+  const statusEl  = document.getElementById('status');
+  const emptyEl   = document.getElementById('empty');
+  const tableEl   = document.getElementById('file-table');
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function fmtSize(b) {
+    if (b < 1024)       return b + ' B';
+    if (b < 1048576)    return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+    return (b / 1073741824).toFixed(2) + ' GB';
+  }
+
+  function fmtDate(ms) {
+    const d = new Date(ms);
+    return d.toLocaleDateString() + ' ' +
+      d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  let statusTimer;
+  function setStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className   = type || '';
+    clearTimeout(statusTimer);
+    if (msg) statusTimer = setTimeout(() => {
+      if (statusEl.textContent === msg) { statusEl.textContent = ''; statusEl.className = ''; }
+    }, 3500);
+  }
+
+  async function loadFiles() {
+    try {
+      const files = await fetch('/api/files').then(r => r.json());
+      fileList.innerHTML = '';
+      if (!files.length) {
+        emptyEl.style.display = '';
+        tableEl.style.display = 'none';
+        return;
+      }
+      emptyEl.style.display = 'none';
+      tableEl.style.display = '';
+      files.forEach(f => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="name">${esc(f.name)}</td>
+          <td class="size">${fmtSize(f.size)}</td>
+          <td class="date">${fmtDate(f.modified)}</td>
+          <td class="dl"><button class="dl-btn" data-name="${esc(f.name)}">download</button></td>`;
+        fileList.appendChild(tr);
+      });
+    } catch (_) {
+      setStatus('Could not load files', 'err');
+    }
+  }
+
+  fileList.addEventListener('click', e => {
+    const btn = e.target.closest('.dl-btn');
+    if (btn) window.location.href = '/api/files/' + encodeURIComponent(btn.dataset.name);
+  });
+
+  async function uploadFiles(files) {
+    for (const file of files) {
+      setStatus('Uploading ' + file.name + '…');
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const res  = await fetch('/upload', { method: 'POST', body: fd });
+        const json = await res.json();
+        if (json.ok) setStatus('Saved: ' + json.filename, 'ok');
+        else         setStatus('Error: ' + json.error, 'err');
+      } catch (_) {
+        setStatus('Upload failed', 'err');
+      }
+    }
+    loadFiles();
+  }
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) uploadFiles([...fileInput.files]);
+    fileInput.value = '';
+  });
+
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('over');
+    if (e.dataTransfer.files.length) uploadFiles([...e.dataTransfer.files]);
+  });
+
+  loadFiles();
+</script>
+</body>
+</html>
