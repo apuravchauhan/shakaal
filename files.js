@@ -10,8 +10,18 @@ const router     = express.Router();
 const UPLOAD_DIR = path.join(os.homedir(), 'data-upload');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+// Resolve a client-supplied relative path inside UPLOAD_DIR, rejecting traversal.
+function safePath(rel) {
+  const target = path.resolve(UPLOAD_DIR, rel || '');
+  if (target !== UPLOAD_DIR && !target.startsWith(UPLOAD_DIR + path.sep)) return null;
+  return target;
+}
+
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  destination: (req, _file, cb) => {
+    const dir = safePath(req.query.path);
+    cb(null, dir && fs.existsSync(dir) ? dir : UPLOAD_DIR);
+  },
   filename: (_req, file, cb) => {
     const ext  = path.extname(file.originalname);
     const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -24,25 +34,30 @@ router.get('/data', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'data.html'));
 });
 
-router.get('/api/files', (_req, res) => {
+router.get('/api/files', (req, res) => {
   try {
-    const files = fs.readdirSync(UPLOAD_DIR)
+    const dir = safePath(req.query.path);
+    if (!dir || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+      return res.status(400).json({ error: 'Bad path' });
+    }
+    const files = fs.readdirSync(dir)
       .map(name => {
-        const stat = fs.statSync(path.join(UPLOAD_DIR, name));
-        return { name, size: stat.size, modified: stat.mtimeMs };
+        const stat = fs.statSync(path.join(dir, name));
+        return { name, isDir: stat.isDirectory(), size: stat.size, modified: stat.mtimeMs };
       })
-      .sort((a, b) => b.modified - a.modified);
+      .sort((a, b) => (b.isDir - a.isDir) || (b.modified - a.modified));
     res.json(files);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/api/files/:filename', (req, res) => {
-  const filename = path.basename(req.params.filename);
-  const filepath = path.join(UPLOAD_DIR, filename);
-  if (!fs.existsSync(filepath)) return res.status(404).json({ error: 'Not found' });
-  res.download(filepath, filename);
+router.get('/api/download', (req, res) => {
+  const filepath = safePath(req.query.path);
+  if (!filepath || !fs.existsSync(filepath) || fs.statSync(filepath).isDirectory()) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.download(filepath, path.basename(filepath));
 });
 
 router.post('/upload', upload.single('file'), (req, res) => {

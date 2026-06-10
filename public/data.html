@@ -71,6 +71,17 @@
     tbody tr:hover { background: var(--bg3); }
     td { padding: 8px 10px; }
     td.name { color: var(--text); word-break: break-all; }
+    td.name .icon { margin-right: 7px; }
+    tr.folder td.name { color: var(--accent); cursor: pointer; }
+    tr.folder:hover td.name { text-decoration: underline; }
+
+    #breadcrumb {
+      margin: 0 20px 10px; font-size: 12px; color: #555;
+      word-break: break-all;
+    }
+    #breadcrumb a { color: var(--accent); text-decoration: none; cursor: pointer; }
+    #breadcrumb a:hover { text-decoration: underline; }
+    #breadcrumb .sep { margin: 0 4px; color: #333; }
     td.size { color: #555; white-space: nowrap; }
     td.date { color: #555; white-space: nowrap; }
     td.dl   { text-align: right; }
@@ -110,6 +121,8 @@
 
 <div id="status"></div>
 
+<div id="breadcrumb"></div>
+
 <table id="file-table" style="display:none">
   <thead>
     <tr>
@@ -130,6 +143,9 @@
   const statusEl  = document.getElementById('status');
   const emptyEl   = document.getElementById('empty');
   const tableEl   = document.getElementById('file-table');
+  const crumbEl   = document.getElementById('breadcrumb');
+
+  let currentPath = '';
 
   function esc(s) {
     return String(s)
@@ -162,11 +178,32 @@
     }, 3500);
   }
 
+  function renderBreadcrumb() {
+    const parts = currentPath ? currentPath.split('/') : [];
+    let html = `<a data-path="">~/data-upload</a>`;
+    let acc = '';
+    parts.forEach(p => {
+      acc = acc ? acc + '/' + p : p;
+      html += `<span class="sep">/</span><a data-path="${esc(acc)}">${esc(p)}</a>`;
+    });
+    crumbEl.innerHTML = html;
+  }
+
   async function loadFiles() {
     try {
-      const files = await fetch('/api/files').then(r => r.json());
+      const files = await fetch('/api/files?path=' + encodeURIComponent(currentPath)).then(r => r.json());
+      if (files.error) throw new Error(files.error);
+      renderBreadcrumb();
       fileList.innerHTML = '';
-      if (!files.length) {
+      if (currentPath) {
+        const up = document.createElement('tr');
+        up.className = 'folder';
+        up.innerHTML = `
+          <td class="name" data-dir=".."><span class="icon">📁</span>..</td>
+          <td class="size"></td><td class="date"></td><td class="dl"></td>`;
+        fileList.appendChild(up);
+      }
+      if (!files.length && !currentPath) {
         emptyEl.style.display = '';
         tableEl.style.display = 'none';
         return;
@@ -175,11 +212,20 @@
       tableEl.style.display = '';
       files.forEach(f => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="name">${esc(f.name)}</td>
-          <td class="size">${fmtSize(f.size)}</td>
-          <td class="date">${fmtDate(f.modified)}</td>
-          <td class="dl"><button class="dl-btn" data-name="${esc(f.name)}">download</button></td>`;
+        if (f.isDir) {
+          tr.className = 'folder';
+          tr.innerHTML = `
+            <td class="name" data-dir="${esc(f.name)}"><span class="icon">📁</span>${esc(f.name)}</td>
+            <td class="size">—</td>
+            <td class="date">${fmtDate(f.modified)}</td>
+            <td class="dl"></td>`;
+        } else {
+          tr.innerHTML = `
+            <td class="name"><span class="icon">📄</span>${esc(f.name)}</td>
+            <td class="size">${fmtSize(f.size)}</td>
+            <td class="date">${fmtDate(f.modified)}</td>
+            <td class="dl"><button class="dl-btn" data-name="${esc(f.name)}">download</button></td>`;
+        }
         fileList.appendChild(tr);
       });
     } catch (_) {
@@ -187,9 +233,29 @@
     }
   }
 
+  crumbEl.addEventListener('click', e => {
+    const a = e.target.closest('a[data-path]');
+    if (!a) return;
+    currentPath = a.dataset.path;
+    loadFiles();
+  });
+
   fileList.addEventListener('click', e => {
+    const dir = e.target.closest('td[data-dir]');
+    if (dir) {
+      if (dir.dataset.dir === '..') {
+        currentPath = currentPath.split('/').slice(0, -1).join('/');
+      } else {
+        currentPath = currentPath ? currentPath + '/' + dir.dataset.dir : dir.dataset.dir;
+      }
+      loadFiles();
+      return;
+    }
     const btn = e.target.closest('.dl-btn');
-    if (btn) window.location.href = '/api/files/' + encodeURIComponent(btn.dataset.name);
+    if (btn) {
+      const rel = currentPath ? currentPath + '/' + btn.dataset.name : btn.dataset.name;
+      window.location.href = '/api/download?path=' + encodeURIComponent(rel);
+    }
   });
 
   async function uploadFiles(files) {
@@ -198,7 +264,7 @@
       const fd = new FormData();
       fd.append('file', file);
       try {
-        const res  = await fetch('/upload', { method: 'POST', body: fd });
+        const res  = await fetch('/upload?path=' + encodeURIComponent(currentPath), { method: 'POST', body: fd });
         const json = await res.json();
         if (json.ok) setStatus('Saved: ' + json.filename, 'ok');
         else         setStatus('Error: ' + json.error, 'err');
